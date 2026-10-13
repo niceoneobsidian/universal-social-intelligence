@@ -137,9 +137,7 @@ class OpenGraphAdapter:
             or jsonld.get("title")
         )
         author = (
-            parser.meta.get("article:author")
-            or parser.meta.get("author")
-            or jsonld.get("author")
+            parser.meta.get("article:author") or parser.meta.get("author") or jsonld.get("author")
         )
         raw_canonical = _clean(parser.canonical)
         canonical_url: str | None = None
@@ -211,7 +209,7 @@ class OpenGraphAdapter:
         field: str, locator: str, parser: _MetadataParser, jsonld: dict[str, str]
     ) -> bool:
         if locator.startswith("meta["):
-            key = locator.split("=", maxsplit=1)[1].split("]", maxsplit=1)[0].strip('"\'')
+            key = locator.split("=", maxsplit=1)[1].split("]", maxsplit=1)[0].strip("\"'")
             tag_value = parser.meta.get(key)
             return tag_value is not None
         if locator == "title":

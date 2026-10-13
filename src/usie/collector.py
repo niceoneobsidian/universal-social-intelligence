@@ -120,9 +120,7 @@ class Collector:
             source_id = self.repo.ensure_source(valid.submitted, valid.normalized, platform.value)
             job_id, created = self.repo.create_job(run_id, source_id, valid.submitted)
             if created:
-                jobs.append(
-                    (job_id, source_id, valid.submitted, valid.normalized, platform)
-                )
+                jobs.append((job_id, source_id, valid.submitted, valid.normalized, platform))
             else:
                 duplicates += 1
 
