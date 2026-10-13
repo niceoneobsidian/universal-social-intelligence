@@ -22,8 +22,10 @@ from usie.evidence import (
     EvidenceError,
     json_bytes,
     new_capture_id,
+    resolve_relative,
     store_artifact,
 )
+from usie.extraction import AdapterError, ExtractionRequest, Extractor, OpenGraphAdapter
 from usie.logging_utils import redact_url
 from usie.models import (
     ARTIFACT_DESCRIPTIONS,
@@ -32,6 +34,7 @@ from usie.models import (
     Completeness,
     ErrorCode,
     Observation,
+    Platform,
     Status,
     StatusDecision,
 )
@@ -89,8 +92,10 @@ class Collector:
         repo: SqliteRepository,
         capturer: Capturer,
         sleep: Any = asyncio.sleep,
+        extractor: Extractor | None = None,
     ) -> None:
         self.settings, self.repo, self.capturer, self._sleep = settings, repo, capturer, sleep
+        self.extractor = extractor if extractor is not None else OpenGraphAdapter()
         self.policy = DestinationPolicy(settings.allow_private_hosts, settings.host_allowlist)
         self.retry = RetryPolicy(
             max_attempts=settings.max_attempts, base_delay_s=settings.retry_base_delay_s
@@ -99,7 +104,7 @@ class Collector:
     async def run(self, urls: Sequence[str]) -> dict[str, Any]:
         run_id = self.repo.create_run(len(urls), self.settings.snapshot(), {"usie": __version__})
         rejected: list[dict[str, str]] = []
-        jobs: list[tuple[str, str, str, str]] = []  # job_id, source_id, submitted, platform
+        jobs: list[tuple[str, str, str, str, Platform]] = []
         duplicates = 0
         for raw in urls:
             try:
@@ -115,20 +120,30 @@ class Collector:
             source_id = self.repo.ensure_source(valid.submitted, valid.normalized, platform.value)
             job_id, created = self.repo.create_job(run_id, source_id, valid.submitted)
             if created:
-                jobs.append((job_id, source_id, valid.submitted, platform.value))
+                jobs.append(
+                    (job_id, source_id, valid.submitted, valid.normalized, platform)
+                )
             else:
                 duplicates += 1
 
         semaphore = asyncio.Semaphore(self.settings.max_concurrency)
         results: dict[str, Status] = {}
 
-        async def worker(job_id: str, source_id: str, submitted: str) -> None:
+        async def worker(
+            job_id: str,
+            source_id: str,
+            submitted: str,
+            normalized: str,
+            platform: Platform,
+        ) -> None:
             async with semaphore:
-                results[job_id] = await self._process_job(run_id, job_id, source_id, submitted)
+                results[job_id] = await self._process_job(
+                    run_id, job_id, source_id, submitted, normalized, platform
+                )
                 if self.settings.delay_ms_between_jobs:
                     await self._sleep(self.settings.delay_ms_between_jobs / 1000)
 
-        tasks = [asyncio.ensure_future(worker(j, s, u)) for j, s, u, _ in jobs]
+        tasks = [asyncio.ensure_future(worker(*job)) for job in jobs]
         try:
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
@@ -153,7 +168,13 @@ class Collector:
         return summary
 
     async def _process_job(
-        self, run_id: str, job_id: str, source_id: str, submitted: str
+        self,
+        run_id: str,
+        job_id: str,
+        source_id: str,
+        submitted: str,
+        normalized: str,
+        platform: Platform,
     ) -> Status:
         self.repo.start_job(job_id)
         decision = StatusDecision(
@@ -165,7 +186,9 @@ class Collector:
             capture_id = new_capture_id()
             self.repo.start_capture(capture_id, job_id, run_id, source_id, attempt, submitted)
             try:
-                decision = await self._one_capture(capture_id, submitted)
+                decision = await self._one_capture(
+                    capture_id, source_id, submitted, normalized, platform
+                )
             except asyncio.CancelledError:
                 self.repo.finish_capture(
                     capture_id,
@@ -189,7 +212,14 @@ class Collector:
         )
         return decision.status
 
-    async def _one_capture(self, capture_id: str, submitted: str) -> StatusDecision:
+    async def _one_capture(
+        self,
+        capture_id: str,
+        source_id: str,
+        submitted: str,
+        normalized: str,
+        platform: Platform,
+    ) -> StatusDecision:
         sink = _Sink(
             self.repo, self.settings.evidence_root, capture_id, self.settings.max_artifact_bytes
         )
@@ -209,6 +239,34 @@ class Collector:
             obs = await self.capturer.capture(request, sink)
             issues.extend(obs.errors)
             decision = classify_observation(obs)
+            if decision.status is Status.PARTIAL:
+                html_artifact = next(
+                    (a for a in sink.stored if a.kind is ArtifactKind.RENDERED_DOM_HTML), None
+                )
+                if html_artifact is not None:
+                    try:
+                        content = resolve_relative(
+                            self.settings.evidence_root, html_artifact.relative_path
+                        ).read_bytes()
+                        extraction = self.extractor.extract(
+                            ExtractionRequest(
+                                capture_id=capture_id,
+                                source_id=source_id,
+                                submitted_url=submitted,
+                                normalized_url=normalized,
+                                platform=platform,
+                                observation=obs,
+                                artifact=html_artifact,
+                                content=content,
+                            )
+                        )
+                    except AdapterError as exc:
+                        issues.append(f"extraction:{exc.code.value}")
+                        extraction = None
+                    if extraction is not None:
+                        self.repo.add_extraction_result(extraction)
+                        if extraction.status is Status.SUCCESS:
+                            decision = classify_observation(obs, extraction_validated=True)
         except asyncio.CancelledError:
             raise
         except EvidenceError as exc:
