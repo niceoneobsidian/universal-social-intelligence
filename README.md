@@ -1,9 +1,9 @@
 # Universal Social Intelligence Engine (USIE)
 
-Standalone, evidence-first URL collection. **Phase P0 complete** (core, schemas, storage, evidence
-preservation). P1 (platform adapters) onward is not started. Not production-certified. See
-`docs/P0_ACCEPTANCE.md` for exactly what was and was not verified, and `docs/DECISIONS.md`
-(**D-001 needs your decision**).
+Standalone, evidence-first URL collection. **P0 is complete; P1 extraction foundations are in
+progress.** The generic metadata adapter reads saved DOM evidence only; it does not fetch pages
+directly or provide platform-specific extraction. Not production-certified. See
+`docs/P0_ACCEPTANCE.md` for P0 verification limits and `docs/DECISIONS.md` for decisions.
 
 ## Quick start
 ```bash
@@ -22,3 +22,7 @@ unauthenticated unless `--storage-state` is given.
 ## Status semantics
 `success` needs a validated extraction (P1+); browser-only evidence is `partial`. `blocked` and
 `unavailable` require observed evidence; `failed` carries an error code; see `docs/DECISIONS.md` D-003.
+
+`social_evidence` is a read-only, lossy compatibility view over the latest capture, not a writable
+store. Append-only `captures` are canonical; the legacy `status_label` maps `blocked`, `unavailable`,
+and `failed` to `inaccessible`. See D-001.

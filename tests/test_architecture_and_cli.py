@@ -33,6 +33,21 @@ def test_layer1_does_not_depend_on_storage() -> None:
         assert not [m for m in imported_modules(f) if m.startswith(("usie.db", "sqlite3"))]
 
 
+def test_extraction_does_not_make_direct_network_requests() -> None:
+    forbidden = (
+        "requests",
+        "httpx",
+        "aiohttp",
+        "urllib.request",
+        "urllib3",
+        "yt_dlp",
+        "subprocess",
+    )
+    for f in (SRC / "extraction").glob("*.py"):
+        bad = [m for m in imported_modules(f) if m.startswith(forbidden)]
+        assert not bad, f"{f.name} imports network or process machinery: {bad}"
+
+
 def run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "usie.cli", *args],
@@ -62,7 +77,7 @@ def cli_env(tmp_path: Path) -> dict[str, str]:
 
 def test_cli_db_status_report_verify(cli_env: dict[str, str]) -> None:
     st = run_cli("db-status", env=cli_env)
-    assert st.returncode == 0 and json.loads(st.stdout) == {"schema_version": 3, "latest": 3}
+    assert st.returncode == 0 and json.loads(st.stdout) == {"schema_version": 4, "latest": 4}
     assert json.loads(run_cli("report", env=cli_env).stdout) == []
     v = run_cli("verify", env=cli_env)
     assert v.returncode == 0 and json.loads(v.stdout)["artifacts_checked"] == 0

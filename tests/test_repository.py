@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from usie.db import SqliteRepository
-from usie.models import ArtifactDescriptor, ArtifactKind, Observation, Status
+from usie.models import ArtifactDescriptor, ArtifactKind, ExtractionResult, Observation, Status
 
 H = "a" * 64
 
@@ -98,12 +98,20 @@ def test_recover_interrupted(repo: SqliteRepository) -> None:
 
 def test_legacy_view_latest_capture_and_lossy_mapping(repo: SqliteRepository) -> None:
     run, src, job = make_job(repo)
-    c1, c2 = str(uuid.uuid4()), str(uuid.uuid4())
-    for cid, attempt, status in [(c1, 1, Status.PARTIAL), (c2, 2, Status.BLOCKED)]:
+    statuses = [
+        (Status.PARTIAL, "partial"),
+        (Status.BLOCKED, "inaccessible"),
+        (Status.UNAVAILABLE, "inaccessible"),
+        (Status.FAILED, "inaccessible"),
+        (Status.SUCCESS, "success"),
+    ]
+    for attempt, (status, expected_label) in enumerate(statuses, start=1):
+        cid = str(uuid.uuid4())
         repo.start_capture(cid, job, run, src, attempt, "u")
         repo.finish_capture(cid, status, "r", None, None, None, [])
-    rows = repo.query("SELECT * FROM social_evidence")
-    assert len(rows) == 1  # one row per source, latest observation
+        rows = repo.query("SELECT * FROM social_evidence")
+        assert len(rows) == 1
+        assert rows[0]["status_label"] == expected_label
     assert set(rows[0]) == {
         "id",
         "source_url",
@@ -114,5 +122,38 @@ def test_legacy_view_latest_capture_and_lossy_mapping(repo: SqliteRepository) ->
         "post_text",
         "raw_metadata_json",
     }
-    assert rows[0]["status_label"] == "inaccessible"
     assert rows[0]["id"] == src
+
+
+def test_legacy_view_is_read_only(repo: SqliteRepository) -> None:
+    with pytest.raises(Exception, match="view"):
+        repo._conn.execute("INSERT INTO social_evidence(id) VALUES('x')")
+    with pytest.raises(Exception, match="view"):
+        repo._conn.execute("DELETE FROM social_evidence")
+
+
+def test_extraction_results_are_append_only(repo: SqliteRepository) -> None:
+    run, src, job = make_job(repo)
+    capture = str(uuid.uuid4())
+    repo.start_capture(capture, job, run, src, 1, "https://a.test/p")
+    extraction = ExtractionResult(
+        extraction_id=str(uuid.uuid4()),
+        capture_id=capture,
+        source_id=src,
+        normalized_url="https://a.test/p",
+        extractor="test",
+        extractor_version="1",
+        status=Status.PARTIAL,
+        created_at="2025-01-01T00:00:00Z",
+    )
+    repo.add_extraction_result(extraction)
+    with pytest.raises(Exception, match="append-only"):
+        repo._conn.execute(
+            "UPDATE extraction_results SET status='failed' WHERE extraction_id=?",
+            (extraction.extraction_id,),
+        )
+    with pytest.raises(Exception, match="append-only"):
+        repo._conn.execute(
+            "DELETE FROM extraction_results WHERE extraction_id=?",
+            (extraction.extraction_id,),
+        )

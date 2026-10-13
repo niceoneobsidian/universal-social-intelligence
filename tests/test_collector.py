@@ -20,10 +20,16 @@ from usie.models import ArtifactKind, ErrorCode, Observation
 class FakeCapturer:
     """Scriptable Layer 1 stand-in. `script` maps URL -> list of per-attempt behaviours."""
 
-    def __init__(self, script: dict[str, list[Any]] | None = None, delay: float = 0.0) -> None:
+    def __init__(
+        self,
+        script: dict[str, list[Any]] | None = None,
+        delay: float = 0.0,
+        html: bytes | None = None,
+    ) -> None:
         self.script = script or {}
         self.calls: list[str] = []
         self.delay = delay
+        self.html = html or b"<html>hello</html>"
 
     async def __aenter__(self) -> FakeCapturer:
         return self
@@ -40,7 +46,7 @@ class FakeCapturer:
         steps = self.script.get(request.url, [])
         step = steps[len(self.calls_for(request.url)) - 1] if steps else "ok"
         if step == "ok":
-            sink.put(ArtifactKind.RENDERED_DOM_HTML, b"<html>hello</html>", "text/html")
+            sink.put(ArtifactKind.RENDERED_DOM_HTML, self.html, "text/html")
             sink.put(ArtifactKind.SCREENSHOT_VIEWPORT, b"\x89PNG", "image/png")
             return Observation(
                 http_status=200,
@@ -93,6 +99,31 @@ async def test_happy_path_stores_evidence_and_partial_status(
         "screenshot_viewport",
         "navigation_record",
     }
+
+
+async def test_validated_extraction_promotes_status_and_persists_provenance(
+    settings: Settings, repo: SqliteRepository
+) -> None:
+    fixture = (
+        Path(__file__).parent / "fixtures" / "extraction" / "open_graph_post.html"
+    ).read_bytes()
+    summary = await Collector(settings, repo, FakeCapturer(html=fixture)).run(
+        ["https://x.com/user/status/1?utm_source=fixture"]
+    )
+    assert summary["job_statuses"] == {"success": 1}
+    capture = rows(repo, "SELECT * FROM captures")[0]
+    assert capture["status"] == "success"
+    extracted = rows(repo, "SELECT * FROM extraction_results")
+    assert len(extracted) == 1
+    assert extracted[0]["post_text"] == "A fixture post with verified provenance."
+    assert extracted[0]["source_id"] == capture["source_id"]
+    assert extracted[0]["normalized_url"] == "https://x.com/user/status/1"
+    provenance = json.loads(extracted[0]["provenance_json"])
+    assert provenance["post_text"]["artifact_sha256"]
+    assert provenance["post_text"]["locator"] == "meta[property=og:description]"
+    compatibility_row = rows(repo, "SELECT * FROM social_evidence")[0]
+    assert compatibility_row["status_label"] == "success"
+    assert compatibility_row["post_text"] == extracted[0]["post_text"]
 
 
 async def test_rejected_inputs_are_audited_without_credentials(

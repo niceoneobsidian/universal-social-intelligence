@@ -12,7 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from usie.db.migrations import apply_migrations
-from usie.models import ArtifactDescriptor, Completeness, Observation, Status
+from usie.models import (
+    ArtifactDescriptor,
+    Completeness,
+    ExtractionResult,
+    Observation,
+    Status,
+)
 
 
 def utc_now() -> str:
@@ -197,6 +203,49 @@ class SqliteRepository:
                     a.description,
                     utc_now(),
                 ),
+            )
+
+    def add_extraction_result(self, result: ExtractionResult) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT INTO extraction_results(extraction_id,capture_id,extractor,"
+                "extractor_version,status,post_text,author,title,canonical_url,metadata_json,"
+                "issues_json,schema_version,created_at,source_id,normalized_url,provenance_json,"
+                "error_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    result.extraction_id,
+                    result.capture_id,
+                    result.extractor,
+                    result.extractor_version,
+                    result.status.value,
+                    result.post_text,
+                    result.author,
+                    result.title,
+                    result.canonical_url,
+                    _dumps(result.metadata),
+                    _dumps(result.issues),
+                    result.schema_version,
+                    result.created_at,
+                    result.source_id,
+                    result.normalized_url,
+                    _dumps({k: v.model_dump() for k, v in result.provenance.items()}),
+                    result.error_code,
+                ),
+            )
+            self._audit(
+                c,
+                "extraction_completed",
+                "system",
+                "capture",
+                result.capture_id,
+                {
+                    "extraction_id": result.extraction_id,
+                    "source_id": result.source_id,
+                    "extractor": result.extractor,
+                    "status": result.status.value,
+                    "error_code": result.error_code,
+                    "fields": sorted(result.provenance),
+                },
             )
 
     def finish_capture(

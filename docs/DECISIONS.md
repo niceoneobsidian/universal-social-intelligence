@@ -2,7 +2,7 @@
 
 Status key: **Confirmed** (verified this session) · **Assumed** (reasoned, not verified) · **Open** (needs an owner decision).
 
-## D-001 Legacy `social_evidence` schema vs. the build specification — **Open (needs your ruling)**
+## D-001 Legacy `social_evidence` schema vs. the build specification — **Confirmed**
 The context PDFs define a single `social_evidence` table (one row per URL, `UNIQUE source_url`,
 `status_label` ∈ success|partial|inaccessible) and "System Rules" forbidding column changes and
 any status values other than those three. The build specification requires the opposite in places:
@@ -10,14 +10,16 @@ append-only capture history (no destructive upsert), 14 tables, and the statuses
 `blocked`/`unavailable`/`failed`/`cancelled`, plus "do not infer deleted from a generic access error".
 A one-row-per-URL table with a 3-value enum cannot satisfy both.
 
-**Resolution applied:** the real schema follows the specification; `social_evidence` exists as a
-**read-only VIEW** (migration 3) exposing the *latest* capture per source under the legacy column
+**Decision:** the real schema follows the specification; append-only `captures` remain canonical.
+`social_evidence` exists only as a **read-only compatibility VIEW** (migration 3) exposing the
+*latest* capture per source under the legacy column
 names (`id, source_url, platform, author, captured_at, status_label, post_text, raw_metadata_json`).
 No legacy column was renamed. `status_label` maps success→success, partial→partial, and
 blocked/unavailable/failed→`inaccessible`. **The mapping is lossy by design** (a crash and a
 deleted post both read as "inaccessible"). Consumers that need the distinction must read `captures`.
-If the 3-value enum is a hard requirement for the *primary* store, say so and the spec's
-status/idempotency requirements need to be relaxed.
+The legacy status mapping is not a supported write contract and must not be used as the canonical
+store. Consumers that require the distinction must read `captures`. No write path will be added
+without a concrete consumer and a separately reviewed migration.
 
 ## D-002 Platform and dependencies
 - Python ≥3.11 declared. **Tested only on Python 3.12.3 / Linux.** 3.11 and macOS are untested.
