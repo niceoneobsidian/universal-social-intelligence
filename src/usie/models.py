@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Status(StrEnum):
@@ -126,6 +126,54 @@ class Completeness(_Frozen):
     expected: list[str]
     present: list[str]
     missing: list[str]
+
+
+class ExtractionProvenance(_Frozen):
+    artifact_id: str
+    artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    locator: str = Field(min_length=1, max_length=240)
+
+
+class ExtractionResult(_Frozen):
+    extraction_id: str
+    capture_id: str
+    source_id: str
+    normalized_url: str
+    extractor: str
+    extractor_version: str
+    status: Status
+    post_text: str | None = None
+    author: str | None = None
+    title: str | None = None
+    canonical_url: str | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)
+    provenance: dict[str, ExtractionProvenance] = Field(default_factory=dict)
+    error_code: str | None = None
+    issues: list[str] = Field(default_factory=list)
+    schema_version: str = "1"
+    created_at: str
+
+    @model_validator(mode="after")
+    def validate_extracted_fields(self) -> ExtractionResult:
+        if self.status not in {Status.SUCCESS, Status.PARTIAL}:
+            raise ValueError("an extraction result must be success or partial")
+        fields = {
+            "post_text": self.post_text,
+            "author": self.author,
+            "title": self.title,
+            "canonical_url": self.canonical_url,
+            "metadata": self.metadata or None,
+        }
+        for name, value in fields.items():
+            if value is not None and name not in self.provenance:
+                raise ValueError(f"extracted field {name} is missing provenance")
+        if self.post_text is not None and not self.post_text.strip():
+            raise ValueError("post_text must not be blank")
+        if self.status is Status.SUCCESS and self.post_text is None:
+            raise ValueError("success requires validated post_text")
+        if self.error_code is not None and self.status is Status.SUCCESS:
+            raise ValueError("an extraction with an error cannot be successful")
+        return self
 
 
 class StatusDecision(_Frozen):

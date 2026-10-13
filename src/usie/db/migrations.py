@@ -236,10 +236,23 @@ LEFT JOIN extraction_results e ON e.extraction_id = (
   WHERE e2.capture_id = c.capture_id ORDER BY e2.created_at DESC, e2.rowid DESC LIMIT 1);
 """
 
+# Additive P1 extraction provenance. Existing extraction rows remain valid and are not rewritten.
+_V4 = """
+ALTER TABLE extraction_results ADD COLUMN source_id TEXT REFERENCES sources(source_id);
+ALTER TABLE extraction_results ADD COLUMN normalized_url TEXT;
+ALTER TABLE extraction_results ADD COLUMN provenance_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE extraction_results ADD COLUMN error_code TEXT;
+CREATE TRIGGER extraction_results_no_update BEFORE UPDATE ON extraction_results
+BEGIN SELECT RAISE(ABORT, 'extraction_results are append-only'); END;
+CREATE TRIGGER extraction_results_no_delete BEFORE DELETE ON extraction_results
+BEGIN SELECT RAISE(ABORT, 'extraction_results are append-only'); END;
+"""
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "core_evidence_schema", _V1),
     Migration(2, "documents_and_structured_fields", _V2),
     Migration(3, "legacy_social_evidence_view", _V3),
+    Migration(4, "extraction_provenance", _V4),
 )
 
 

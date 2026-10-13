@@ -75,7 +75,7 @@ def test_upgrade_path_preserves_existing_data(tmp_path: Path) -> None:
     conn.execute(
         "INSERT INTO sources VALUES ('s1','https://a.test/','https://a.test/','UNIVERSAL','t')"
     )
-    assert apply_migrations(conn) == [2, 3]
+    assert apply_migrations(conn) == [2, 3, 4]
     assert conn.execute("SELECT source_url FROM sources").fetchone()[0] == "https://a.test/"
 
 
