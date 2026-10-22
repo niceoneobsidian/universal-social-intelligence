@@ -4,6 +4,7 @@ import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 from usie.integrations.ocif import OCIFExportError, export_capture
@@ -22,7 +23,7 @@ class OCIFExportTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def query(self, sql: str, params: tuple = ()) -> list[dict]:
+    def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         if "FROM captures c JOIN sources s" in sql:
             return [{
                 "capture_id": "capture-1", "source_id": "source-1", "status": "success",
@@ -66,7 +67,7 @@ class OCIFExportTests(unittest.TestCase):
     def test_non_terminal_capture_is_rejected(self) -> None:
         original = self.repo.query.side_effect
 
-        def queued_query(sql: str, params: tuple = ()) -> list[dict]:
+        def queued_query(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
             rows = original(sql, params)
             if "FROM captures c JOIN sources s" in sql:
                 rows[0]["status"] = "running"
