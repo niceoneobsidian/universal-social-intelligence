@@ -47,7 +47,7 @@ def export_capture(
         raise OCIFExportError("producer_revision is required")
     captures = repository.query(
         """SELECT c.capture_id, c.source_id, c.status, c.status_reason, c.captured_at,
-                  c.finished_at, c.submitted_url, s.normalized_url, s.platform
+                  c.finished_at, c.submitted_url, c.issues_json, s.normalized_url, s.platform
            FROM captures c JOIN sources s ON s.source_id=c.source_id
            WHERE c.capture_id=?""",
         (capture_id,),
@@ -110,6 +110,8 @@ def export_capture(
                 raise OCIFExportError(f"invalid provenance entry for field {field}")
             artifact_id = ref.get("artifact_id")
             artifact_sha = ref.get("artifact_sha256")
+            if not isinstance(artifact_id, str) or not isinstance(artifact_sha, str):
+                raise OCIFExportError(f"invalid artifact identity for provenance field {field}")
             if artifact_id not in artifact_hashes or artifact_hashes[artifact_id] != artifact_sha:
                 raise OCIFExportError(f"provenance for {field} references missing or changed artifact")
         extraction = {
