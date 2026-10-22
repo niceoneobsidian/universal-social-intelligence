@@ -27,7 +27,7 @@ class OCIFExportTests(unittest.TestCase):
         if "FROM captures c JOIN sources s" in sql:
             return [{
                 "capture_id": "capture-1", "source_id": "source-1", "status": "success",
-                "status_reason": None, "captured_at": "2026-10-22T10:00:00+00:00",
+                "status_reason": None, "error_code": None, "captured_at": "2026-10-22T10:00:00+00:00",
                 "finished_at": "2026-10-22T10:00:01+00:00",
                 "submitted_url": "https://example.org/post/1",
                 "normalized_url": "https://example.org/post/1", "platform": "UNIVERSAL",
