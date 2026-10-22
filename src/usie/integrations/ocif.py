@@ -47,7 +47,7 @@ def export_capture(
         raise OCIFExportError("producer_revision is required")
     captures = repository.query(
         """SELECT c.capture_id, c.source_id, c.status, c.status_reason, c.captured_at,
-                  c.finished_at, c.submitted_url, c.issues_json, s.normalized_url, s.platform
+                  c.finished_at, c.submitted_url, c.issues_json, c.error_code, s.normalized_url, s.platform
            FROM captures c JOIN sources s ON s.source_id=c.source_id
            WHERE c.capture_id=?""",
         (capture_id,),
@@ -144,6 +144,7 @@ def export_capture(
         "capture_id": str(capture["capture_id"]),
         "capture_status": status,
         "status_reason": capture.get("status_reason"),
+        "error_code": capture.get("error_code"),
         "captured_at": str(capture["captured_at"]),
         "completed_at": capture.get("finished_at"),
         "artifacts": artifact_envelopes,
