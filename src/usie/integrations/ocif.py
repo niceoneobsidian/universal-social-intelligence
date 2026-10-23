@@ -17,6 +17,7 @@ CONTRACT_VERSION = "0.1.0"
 TERMINAL_STATUSES = frozenset(
     {"success", "partial", "blocked", "unavailable", "failed", "cancelled"}
 )
+EXTRACTION_STATUSES = frozenset({"success", "partial"})
 
 
 class OCIFExportError(ValueError):
@@ -30,6 +31,72 @@ def _decode_json(value: str | None, field: str, fallback: Any) -> Any:
         return json.loads(value)
     except (TypeError, json.JSONDecodeError) as exc:
         raise OCIFExportError(f"stored {field} is not valid JSON") from exc
+
+
+def _validate_extraction(row: dict[str, Any], artifact_hashes: dict[str, str]) -> dict[str, Any]:
+    """Validate persisted extraction rows against the same invariants as ExtractionResult."""
+    status = row.get("status")
+    if status not in EXTRACTION_STATUSES:
+        raise OCIFExportError("stored extraction has an unsupported status")
+
+    provenance = _decode_json(row.get("provenance_json"), "extraction provenance", {})
+    metadata = _decode_json(row.get("metadata_json"), "extraction metadata", {})
+    issues = _decode_json(row.get("issues_json"), "extraction issues", [])
+    if not isinstance(provenance, dict) or not isinstance(metadata, dict):
+        raise OCIFExportError("stored extraction metadata/provenance has the wrong shape")
+    if not isinstance(issues, list):
+        raise OCIFExportError("stored extraction issues must be a list")
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in metadata.items()):
+        raise OCIFExportError("stored extraction metadata must contain string keys and values")
+
+    for field, ref in provenance.items():
+        if not isinstance(field, str) or not isinstance(ref, dict):
+            raise OCIFExportError("stored extraction provenance has an invalid entry")
+        artifact_id = ref.get("artifact_id")
+        artifact_sha = ref.get("artifact_sha256")
+        locator = ref.get("locator")
+        if not all(isinstance(item, str) and item for item in (artifact_id, artifact_sha, locator)):
+            raise OCIFExportError(f"invalid artifact provenance for field {field}")
+        if artifact_hashes.get(artifact_id) != artifact_sha:
+            raise OCIFExportError(
+                f"provenance for {field} references a missing or changed artifact"
+            )
+
+    fields = {
+        "post_text": row.get("post_text"),
+        "author": row.get("author"),
+        "title": row.get("title"),
+        "canonical_url": row.get("canonical_url"),
+        "metadata": metadata or None,
+    }
+    for field, value in fields.items():
+        if value is not None and field not in provenance:
+            raise OCIFExportError(f"extracted field {field} is missing provenance")
+
+    post_text = row.get("post_text")
+    if post_text is not None and (not isinstance(post_text, str) or not post_text.strip()):
+        raise OCIFExportError("stored extraction post_text must not be blank")
+    error_code = row.get("error_code")
+    if status == "success" and (not post_text or "post_text" not in provenance):
+        raise OCIFExportError("successful extraction requires validated post_text provenance")
+    if status == "success" and error_code is not None:
+        raise OCIFExportError("an extraction with an error cannot be successful")
+
+    return {
+        "extraction_id": str(row["extraction_id"]),
+        "extractor": str(row["extractor"]),
+        "extractor_version": str(row.get("extractor_version") or "unknown"),
+        "schema_version": str(row["schema_version"]),
+        "status": status,
+        "post_text": post_text,
+        "author": row.get("author"),
+        "title": row.get("title"),
+        "canonical_url": row.get("canonical_url"),
+        "metadata": metadata,
+        "provenance": provenance,
+        "error_code": error_code,
+        "issues": [str(item) for item in issues],
+    }
 
 
 def export_capture(
@@ -60,6 +127,7 @@ def export_capture(
     status = str(capture["status"])
     if status not in TERMINAL_STATUSES:
         raise OCIFExportError(f"capture is not finalized: {status}")
+
     artifacts = repository.query(
         """SELECT artifact_id, kind, relative_path, sha256, byte_size, media_type
            FROM artifacts WHERE capture_id=? ORDER BY artifact_id""",
@@ -79,21 +147,26 @@ def export_capture(
             raise OCIFExportError(
                 f"artifact {artifact['artifact_id']} failed verification: {problem}"
             )
-        artifact_hashes[str(artifact["artifact_id"])] = str(artifact["sha256"])
+        artifact_id = str(artifact["artifact_id"])
+        artifact_hash = str(artifact["sha256"])
+        if artifact_id in artifact_hashes:
+            raise OCIFExportError("duplicate artifact identity in capture")
+        artifact_hashes[artifact_id] = artifact_hash
         artifact_envelopes.append(
             {
-                "artifact_id": str(artifact["artifact_id"]),
+                "artifact_id": artifact_id,
                 "kind": str(artifact["kind"]),
                 "location": str(artifact["relative_path"]),
-                "sha256": str(artifact["sha256"]),
+                "sha256": artifact_hash,
                 "byte_size": int(artifact["byte_size"]),
                 "media_type": str(artifact["media_type"]),
             }
         )
+
     extraction_rows = repository.query(
         """SELECT extraction_id, extractor, extractor_version, status, post_text, author,
                   title, canonical_url, metadata_json, issues_json, schema_version,
-                  provenance_json
+                  provenance_json, error_code
            FROM extraction_results WHERE capture_id=?
            ORDER BY created_at DESC, rowid DESC LIMIT 1""",
         (capture_id,),
@@ -101,49 +174,21 @@ def export_capture(
     extraction: dict[str, Any] | None = None
     warnings = _decode_json(capture.get("issues_json"), "capture issues", [])
     if not isinstance(warnings, list):
-        warnings = []
+        raise OCIFExportError("stored capture issues must be a list")
     if extraction_rows:
-        row = extraction_rows[0]
-        provenance = _decode_json(row.get("provenance_json"), "extraction provenance", {})
-        metadata = _decode_json(row.get("metadata_json"), "extraction metadata", {})
-        extraction_issues = _decode_json(row.get("issues_json"), "extraction issues", [])
-        if not isinstance(provenance, dict) or not isinstance(metadata, dict):
-            raise OCIFExportError("stored extraction metadata/provenance has the wrong shape")
-        for field, ref in provenance.items():
-            if not isinstance(ref, dict):
-                raise OCIFExportError(f"invalid provenance entry for field {field}")
-            artifact_id = ref.get("artifact_id")
-            artifact_sha = ref.get("artifact_sha256")
-            if not isinstance(artifact_id, str) or not isinstance(artifact_sha, str):
-                raise OCIFExportError(f"invalid artifact identity for provenance field {field}")
-            if artifact_id not in artifact_hashes or artifact_hashes[artifact_id] != artifact_sha:
-                raise OCIFExportError(
-                    f"provenance for {field} references missing or changed artifact"
-                )
-        extraction = {
-            "extraction_id": str(row["extraction_id"]),
-            "extractor": str(row["extractor"]),
-            "extractor_version": str(row.get("extractor_version") or "unknown"),
-            "schema_version": str(row["schema_version"]),
-            "status": str(row["status"]),
-            "post_text": row.get("post_text"),
-            "author": row.get("author"),
-            "title": row.get("title"),
-            "canonical_url": row.get("canonical_url"),
-            "metadata": metadata,
-            "provenance": provenance,
-        }
-        if isinstance(extraction_issues, list):
-            warnings.extend(str(item) for item in extraction_issues)
+        extraction = _validate_extraction(extraction_rows[0], artifact_hashes)
+        warnings.extend(extraction["issues"])
     elif status == "success":
         raise OCIFExportError("successful capture has no extraction result")
+
     if status == "success" and (
         extraction is None
         or extraction["status"] != "success"
         or not extraction.get("post_text")
-        or not extraction.get("provenance")
+        or "post_text" not in extraction.get("provenance", {})
     ):
-        raise OCIFExportError("success requires validated non-empty extraction and provenance")
+        raise OCIFExportError("successful capture requires validated extraction and provenance")
+
     return {
         "contract_version": CONTRACT_VERSION,
         "source_id": str(capture["source_id"]),
@@ -159,5 +204,5 @@ def export_capture(
         "extraction": extraction,
         "platform": str(capture["platform"]),
         "producer_revision": producer_revision.strip(),
-        "warnings": warnings,
+        "warnings": [str(item) for item in warnings],
     }
