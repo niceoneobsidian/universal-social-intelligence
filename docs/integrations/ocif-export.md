@@ -1,7 +1,7 @@
 # OCIF Evidence Export Adapter
 
-**Status:** Read-only adapter and producer tests are implemented in the integration branch. Producer CI passes on the current branch head.  
-**Wire contract:** `ocif.usie-import` version `0.1.0` is approved for internal cross-repository integration testing; it is not a stable public API or production certification.
+**Status:** Candidate read-only exporter and producer tests are present on this pull-request branch. The latest checks must be rerun against the final branch head before this change is considered validated.  
+**Wire contract:** `ocif.usie-import` version `0.1.0` is a candidate for internal cross-repository integration testing only. It is not a stable public API or production certification.
 
 ## Source of truth
 
@@ -12,15 +12,19 @@ For each finalized capture it emits:
 - submitted and normalized URLs;
 - exact capture status and status reason;
 - capture start/finish timestamps;
-- artifact IDs, kinds, relative paths, hashes, byte sizes and media types;
-- the latest extraction record, extractor/schema versions and field-level provenance;
-- platform classification, producer revision and warnings.
+- artifact IDs, kinds, relative paths, hashes, byte sizes, and media types;
+- the latest extraction record, extractor/schema versions, field-level provenance, and extraction error code;
+- platform classification, producer revision, and warnings.
 
 The caller must supply `producer_revision`; the adapter does not guess a Git revision from runtime state. It does not export cookies, authorization headers, browser storage state, raw HTML, or secret material.
 
-## Integrity checks
+## Integrity and semantic checks
 
-Before emitting an artifact reference, the adapter calls `verify_artifact()` against the configured evidence root. Missing files, byte-size mismatch, hash mismatch, traversal paths, and extraction provenance that refers to a missing or different artifact cause export rejection. A capture marked `success` is rejected if its extraction is missing, non-successful, empty or lacks provenance. Non-terminal captures are not exportable.
+Before emitting an artifact reference, the adapter calls `verify_artifact()` against the configured evidence root. Missing files, byte-size mismatch, hash mismatch, traversal paths, and provenance references to missing or different artifacts cause export rejection.
+
+The exporter validates persisted extraction rows rather than assuming every row is valid because the normal write path uses Pydantic. It rejects unsupported extraction statuses, malformed JSON or issue shapes, populated fields without provenance, provenance pointing to unverified artifacts, and a successful extraction with blank/missing post text or an error code. A capture marked `success` is rejected if its extraction is missing or not a validated success. Capture status and extraction status remain separate.
+
+Non-terminal captures are not exportable. The exporter is read-only and introduces no public HTTP endpoint.
 
 ## Example
 
@@ -41,23 +45,23 @@ finally:
     repo.close()
 ```
 
-The caller is responsible for serializing this envelope to a reviewed, access-controlled transport. No public HTTP endpoint or automatic cross-repository write is introduced here.
+The caller is responsible for serializing the envelope to a reviewed, access-controlled transport. No public HTTP endpoint or automatic cross-repository write is introduced here.
 
 ## Contract decision
 
-USIE and OCIF accept the `0.1.0` envelope for internal implementation and integration testing. This decision preserves USIE ownership of canonical capture history and artifact bytes and OCIF ownership of imported observations and retrieval. The adapter is read-only and emits no public endpoint. The contract must not be described as stable or production-approved until the shared acceptance gates pass on the final reviewed PR heads.
+`0.1.0` remains a candidate for internal integration testing. USIE owns canonical capture history and artifact bytes; OCIF owns imported observations and retrieval. Neither repository should treat this candidate as stable or production-approved until the final reviewed PR heads pass the shared acceptance gates and both owners explicitly approve the contract.
 
-## Acceptance still required
+## Producer acceptance gates
 
-1. Run `pytest`, `ruff check src tests`, and `mypy`.
-2. Add a disposable real-database test using a real USIE capture and artifact directory.
-3. Compare the emitted JSON with OCIF contract fixtures for success, partial, blocked, unavailable, failed and cancelled outcomes.
-4. Test malformed database JSON, missing artifacts, hash mismatch and provenance mismatch.
-5. Approve the candidate contract with OCIF owners before promising compatibility.
-
+1. Run formatting, lint, typing, and the complete USIE test suite on the final head.
+2. Run a disposable real-SQLite integration test with an artifact directory.
+3. Cover valid provenance, missing populated-field provenance, unsupported extraction statuses, invalid error/status combinations, malformed issue JSON, missing/tampered artifacts, and non-terminal captures.
+4. Compare the emitted JSON with shared OCIF fixtures for success, partial, blocked, unavailable, failed, and cancelled capture outcomes.
+5. Confirm duplicate/replay behavior and producer revision semantics.
+6. Approve the candidate contract with OCIF owners before promising compatibility.
 
 ## Consumer-side artifact verification
 
-The producer-side export hash is necessary but not sufficient: OCIF must verify the bytes again at the import boundary. For artifact-bearing envelopes, configure the PostgreSQL consumer with the trusted artifact root that contains the exported files. The consumer resolves every manifest path under that root, rejects traversal or missing files, checks byte size, and recalculates SHA-256 before persisting the observation. An artifact-bearing envelope without an artifact root must be rejected/quarantined; envelopes with no artifacts do not require a file root.
+The producer-side hash is necessary but not sufficient: OCIF must verify bytes again at import. For artifact-bearing envelopes, configure the PostgreSQL consumer with the trusted artifact root containing the exported files. The consumer resolves each manifest path under that root, rejects traversal/symlink escapes or missing files, checks byte size, and recalculates SHA-256 before persisting the observation. An artifact-bearing envelope without an artifact root must be rejected or quarantined; envelopes with no artifacts do not require a file root.
 
-Restart/replay tests must replay the unchanged envelope against the same PostgreSQL database and artifact root. A mutated artifact must fail integrity verification even if the envelope itself is unchanged. A changed envelope under an existing source/capture idempotency key must not overwrite the accepted observation.
+Replay tests must replay the unchanged envelope against the same PostgreSQL database and artifact root. A mutated artifact must fail integrity verification even if the envelope is unchanged. A changed envelope under an existing source/capture idempotency key must not overwrite the accepted observation.
