@@ -107,6 +107,44 @@ class OCIFExportTests(unittest.TestCase):
         with self.assertRaises(OCIFExportError):
             export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
 
+    def test_missing_artifact_is_rejected(self) -> None:
+        (self.root / "page.html").unlink()
+        with self.assertRaises(OCIFExportError):
+            export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
+
+    def test_path_traversal_is_rejected(self) -> None:
+        original = self.repo.query.side_effect
+
+        def traversal_query(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+            rows = cast(list[dict[str, Any]], original(sql, params))
+            if "FROM artifacts" in sql:
+                rows[0]["relative_path"] = "../outside.html"
+            return rows
+
+        self.repo.query.side_effect = traversal_query
+        with self.assertRaisesRegex(OCIFExportError, "path escapes"):
+            export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
+
+    def test_terminal_capture_statuses_are_preserved(self) -> None:
+        original = self.query
+        for status in ("partial", "blocked", "unavailable", "failed", "cancelled"):
+            def terminal_query(
+                sql: str, params: tuple[Any, ...] = (), *, capture_status: str = status
+            ) -> list[dict[str, Any]]:
+                rows = cast(list[dict[str, Any]], original(sql, params))
+                if "FROM captures c JOIN sources s" in sql:
+                    rows[0]["status"] = capture_status
+                if "FROM extraction_results" in sql:
+                    return []
+                return rows
+
+            self.repo.query.side_effect = terminal_query
+            result = export_capture(
+                self.repo, self.root, "capture-1", producer_revision="abc123"
+            )
+            self.assertEqual(result["capture_status"], status)
+            self.assertIsNone(result["extraction"])
+
     def test_non_terminal_capture_is_rejected(self) -> None:
         original = self.repo.query.side_effect
 
