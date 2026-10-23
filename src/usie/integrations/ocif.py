@@ -3,6 +3,7 @@
 This adapter does not add an HTTP endpoint and does not mutate USIE capture history.
 The caller supplies the deployed producer revision and the configured evidence root.
 """
+
 from __future__ import annotations
 
 import json
@@ -68,7 +69,9 @@ def export_capture(
     artifact_hashes: dict[str, str] = {}
     for artifact in artifacts:
         problem = verify_artifact(
-            root, str(artifact["relative_path"]), str(artifact["sha256"]),
+            root,
+            str(artifact["relative_path"]),
+            str(artifact["sha256"]),
             int(artifact["byte_size"]),
         )
         if problem is not None:
@@ -113,7 +116,9 @@ def export_capture(
             if not isinstance(artifact_id, str) or not isinstance(artifact_sha, str):
                 raise OCIFExportError(f"invalid artifact identity for provenance field {field}")
             if artifact_id not in artifact_hashes or artifact_hashes[artifact_id] != artifact_sha:
-                raise OCIFExportError(f"provenance for {field} references missing or changed artifact")
+                raise OCIFExportError(
+                    f"provenance for {field} references missing or changed artifact"
+                )
         extraction = {
             "extraction_id": str(row["extraction_id"]),
             "extractor": str(row["extractor"]),
@@ -132,8 +137,10 @@ def export_capture(
     elif status == "success":
         raise OCIFExportError("successful capture has no extraction result")
     if status == "success" and (
-        extraction is None or extraction["status"] != "success"
-        or not extraction.get("post_text") or not extraction.get("provenance")
+        extraction is None
+        or extraction["status"] != "success"
+        or not extraction.get("post_text")
+        or not extraction.get("provenance")
     ):
         raise OCIFExportError("success requires validated non-empty extraction and provenance")
     return {
