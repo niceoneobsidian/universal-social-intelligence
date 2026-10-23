@@ -1,15 +1,16 @@
 # USIE Capture and Artifact Interface Verification
 
-**Verified against:** `main` source files retrieved on 2026-10-23  
-**Scope:** code/schema verification, not a runtime integration test  
-**Conclusion:** USIE has a canonical SQLite capture/artifact model and typed extraction results. It does not currently expose a documented stable OCIF JSON export API in the inspected source.
+**Baseline inspected:** `main` at `75fe1c23545c05c7d0894a3e6550f22f7cd2348e`  
+**Scope:** source/schema inspection; not a runtime integration test  
+**Conclusion:** The inspected baseline has canonical SQLite capture/artifact records and typed extraction results, but no stable, documented OCIF export API. A candidate read-only exporter is proposed separately in [PR #6](https://github.com/niceoneobsidian/universal-social-intelligence/pull/6); it must not be described as merged or production-approved until its final head passes the required checks and both repository owners approve the contract.
 
 ## Files inspected
 
 - `src/usie/models.py`: `Status`, `ArtifactKind`, `ArtifactDescriptor`, `ExtractionProvenance`, `ExtractionResult`, `Observation`.
 - `src/usie/db/repository.py`: `SqliteRepository`, transactional writes, source/job/capture/artifact/extraction/audit operations.
-- `src/usie/collector.py`: `Collector` composes validation, capture, evidence persistence, extraction and status classification.
+- `src/usie/collector.py`: capture orchestration and status classification.
 - `src/usie/extraction/__init__.py`: `Extractor`, `ExtractionRequest`, `OpenGraphAdapter`.
+- `src/usie/evidence.py`: artifact path resolution and hash/size verification.
 - `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `README.md`, `pyproject.toml`.
 
 ## Verified producer-side structures
@@ -18,45 +19,46 @@
 
 The canonical `Status` enum contains `queued`, `running`, `success`, `partial`, `blocked`, `unavailable`, `failed`, and `cancelled`. Terminal statuses are success, partial, blocked, unavailable, failed, and cancelled.
 
-Do not use `social_evidence` for contract export when the distinctions matter. It is a read-only compatibility VIEW over the latest capture. Its `status_label` is lossy: blocked/unavailable/failed map to `inaccessible`. Canonical capture history is append-only, except for the documented one-time finalization transition.
+Do not use `social_evidence` for contract export when distinctions matter. It is a read-only compatibility view over the latest capture and its `status_label` is lossy: blocked, unavailable, and failed map to `inaccessible`. Export canonical capture history instead.
 
 ### Artifact descriptor
 
 The typed `ArtifactDescriptor` fields are:
 
 - `artifact_id`
-- `kind` (the `ArtifactKind` enum)
+- `kind` (`ArtifactKind`)
 - `relative_path`
 - `sha256`
 - `byte_size`
 - `media_type`
 - `description`
 
-Observed artifact kinds include `rendered_dom_html`, `response_body`, `screenshot_viewport`, `screenshot_full_page`, `navigation_record`, and `capture_manifest`. These are capture evidence types; the inspected enum does not define a PDF-specific artifact kind. Do not assume a PDF capture path exists solely because a PDF can be represented as bytes.
+Observed artifact kinds include `rendered_dom_html`, `response_body`, `screenshot_viewport`, `screenshot_full_page`, `navigation_record`, and `capture_manifest`. The inspected enum does not define a PDF-specific artifact kind. Do not infer PDF acquisition from the ability to represent arbitrary bytes.
 
-Artifact files are stored under the configured USIE data directory in capture-specific paths. The documented writer uses fixed filenames, atomic creation, fsync, restrictive permissions, and hash verification. Preserve artifact paths as producer-owned references; do not expose absolute local paths in exported contracts.
+Artifact paths are producer-owned references. Never export absolute local paths. Resolve relative paths under the configured evidence root and verify the actual bytes, hash, and size before export and again at the consumer boundary. Path checks must account for traversal and symlinks; a string-prefix check alone is insufficient.
 
 ### Extraction result
 
-The typed `ExtractionResult` includes `extraction_id`, `capture_id`, `source_id`, `normalized_url`, `extractor`, `extractor_version`, `status`, optional post text/author/title/canonical URL/metadata, field-level `provenance`, error code, issues, schema version and created timestamp.
+The typed `ExtractionResult` includes `extraction_id`, `capture_id`, `source_id`, `normalized_url`, `extractor`, `extractor_version`, `status`, optional post text/author/title/canonical URL/metadata, field-level `provenance`, error code, issues, schema version, and creation timestamp.
 
-Validation rules require provenance for every populated extracted field. `success` requires non-empty validated `post_text`; an extraction with an error cannot be successful. Extraction result status is constrained to success/partial and is not the same field as the capture outcome.
+The model requires provenance for each populated extracted field. Success requires non-empty validated `post_text`; an extraction with an error cannot be successful. Extraction status is constrained to success/partial and is not the same as capture status. A consumer/exporter must validate persisted rows too; database rows should not be assumed valid merely because the typed model normally validates writes.
 
 ### Collector and persistence boundary
 
-`Collector` receives an injected `SqliteRepository`, capturer, settings, and optional extractor. Its default extractor is `OpenGraphAdapter`. Architecture docs say the generic metadata adapter reads locally saved DOM evidence and performs no network I/O; it does not provide platform-specific extraction.
+`Collector` receives an injected `SqliteRepository`, capturer, settings, and optional extractor. Its default extractor is `OpenGraphAdapter`. The generic metadata adapter reads locally saved DOM evidence and does not provide platform-specific API extraction.
 
-The repository provides transactional operations for runs/jobs, sources, captures, artifact descriptors, extraction results and audit events. Duplicate jobs are idempotent per run/source; a recapture is a new capture. Recovery marks unfinished captures failed/interrupted rather than deleting evidence.
+The repository provides transactional operations for runs/jobs, sources, captures, artifact descriptors, extraction results, and audit events. Duplicate jobs are idempotent per run/source; a recapture is a new capture. Recovery marks unfinished captures failed/interrupted rather than deleting evidence.
 
 ## Integration decision
 
-1. Do not invent a public export endpoint, SDK, or filesystem manifest shape. No stable producer export API was found in the inspected paths.
-2. Build the first OCIF integration against a versioned fixture/export function explicitly approved by the USIE owner, or add a producer-side export command in a separate reviewed change.
-3. The export should include the typed artifact descriptor plus source/capture identity, exact canonical statuses, extraction result and producer revision. Resolve `relative_path` only inside the configured USIE evidence root and verify SHA-256 before reading.
-4. If PDFs are to be processed, first add and test a documented PDF artifact acquisition path. The existing artifact enum is not itself proof that USIE collects PDF files.
-5. Keep PDF extraction status separate from capture status. Never mark browser-only evidence or an unvalidated document conversion as USIE `success`.
-6. Contract tests must cover all capture statuses, missing artifacts, hash mismatch, traversal/absolute paths, duplicate capture, recapture, and secrets redaction.
+1. Do not invent a public endpoint, SDK, or manifest format. The inspected baseline did not contain a stable producer export API.
+2. Review the candidate versioned exporter in [PR #6](https://github.com/niceoneobsidian/universal-social-intelligence/pull/6) separately from this source-verification document.
+3. Keep the contract versioned and explicitly internal until both USIE and OCIF owners approve the exact schema and semantics.
+4. Preserve source/capture identity, canonical capture status, extraction status, artifact descriptor, field-level provenance, and producer revision.
+5. Resolve artifact references only within a configured trusted root; verify hash and byte size at both producer and consumer boundaries.
+6. If PDFs are required, first implement and test a documented PDF acquisition path. Keep acquisition, extraction, and downstream processing statuses separate.
+7. Contract tests must cover all capture statuses, invalid extraction combinations, missing/tampered artifacts, path traversal and symlink escape, duplicate import/replay, recapture identity, malformed stored JSON, and secret redaction.
 
-## Verification limits
+## Verification status and limitations
 
-This report is based on source inspection of the listed files and design records. The connector did not execute USIE tests or query a live USIE database in this session. No claim is made that an OCIF export command or PDF capture feature currently exists. The producer/consumer contract remains subject to explicit owner approval.
+This document is source-verified against the listed baseline only. It does not claim that this documentation change ran USIE tests, queried a live database, or proved end-to-end OCIF ingestion. The candidate exporter and its tests are a separate change; their latest CI result must be checked after any new commits. No claim is made that PDF acquisition currently exists. Contract approval and production readiness remain outstanding until explicit owner review and the shared acceptance gates pass.
