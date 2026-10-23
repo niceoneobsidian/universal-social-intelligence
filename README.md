@@ -19,6 +19,10 @@ Data lives in `~/.usie` (override `USIE_DATA_DIR`). Loopback/private destination
 explicitly allowed (`USIE_HOST_ALLOWLIST`, `USIE_ALLOW_PRIVATE_HOSTS`). Browser contexts are
 unauthenticated unless `--storage-state` is given.
 
+## OCIF integration
+
+A read-only candidate export adapter is under review at `src/usie/integrations/ocif.py`. It reads canonical capture tables, verifies artifact bytes and field-level provenance, and emits a versioned envelope. It does not expose a network API or mutate capture history. See [OCIF export contract](docs/integrations/ocif-export.md). The adapter and contract remain unverified until tests and a disposable-database integration run pass.
+
 ## Status semantics
 `success` needs a validated extraction (P1+); browser-only evidence is `partial`. `blocked` and
 `unavailable` require observed evidence; `failed` carries an error code; see `docs/DECISIONS.md` D-003.
