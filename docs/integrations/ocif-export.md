@@ -54,3 +54,10 @@ USIE and OCIF accept the `0.1.0` envelope for internal implementation and integr
 3. Compare the emitted JSON with OCIF contract fixtures for success, partial, blocked, unavailable, failed and cancelled outcomes.
 4. Test malformed database JSON, missing artifacts, hash mismatch and provenance mismatch.
 5. Approve the candidate contract with OCIF owners before promising compatibility.
+
+
+## Consumer-side artifact verification
+
+The producer-side export hash is necessary but not sufficient: OCIF must verify the bytes again at the import boundary. For artifact-bearing envelopes, configure the PostgreSQL consumer with the trusted artifact root that contains the exported files. The consumer resolves every manifest path under that root, rejects traversal or missing files, checks byte size, and recalculates SHA-256 before persisting the observation. An artifact-bearing envelope without an artifact root must be rejected/quarantined; envelopes with no artifacts do not require a file root.
+
+Restart/replay tests must replay the unchanged envelope against the same PostgreSQL database and artifact root. A mutated artifact must fail integrity verification even if the envelope itself is unchanged. A changed envelope under an existing source/capture idempotency key must not overwrite the accepted observation.
