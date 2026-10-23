@@ -65,19 +65,22 @@ def test_export_from_real_sqlite_capture_preserves_artifact_provenance() -> None
                 timestamp,
             ),
         )
+        reference = {
+            "artifact_id": artifact_id,
+            "artifact_sha256": artifact_hash,
+            "locator": "meta[property=og:description]",
+        }
         provenance = {
-            "post_text": {
-                "artifact_id": artifact_id,
-                "artifact_sha256": artifact_hash,
-                "locator": "meta[property=og:description]",
-            }
+            "post_text": reference,
+            "title": reference,
+            "canonical_url": reference,
         }
         connection.execute(
             "INSERT INTO extraction_results(extraction_id, capture_id, extractor, "
             "extractor_version, status, post_text, title, canonical_url, metadata_json, "
-            "issues_json, schema_version, created_at, source_id, normalized_url, provenance_json) "
-            "VALUES (?, ?, 'generic_metadata', '0.1.0', 'success', ?, ?, ?, '{}', '[]', "
-            "'1', ?, ?, ?, ?)",
+            "issues_json, schema_version, created_at, source_id, normalized_url, provenance_json, "
+            "error_code) VALUES (?, ?, 'generic_metadata', '0.1.0', 'success', ?, ?, ?, '{}', "
+            "'[]', '1', ?, ?, ?, ?, NULL)",
             (
                 extraction_id,
                 capture_id,
@@ -106,3 +109,4 @@ def test_export_from_real_sqlite_capture_preserves_artifact_provenance() -> None
         assert envelope["capture_status"] == "success"
         assert envelope["artifacts"][0]["sha256"] == artifact_hash
         assert envelope["extraction"]["provenance"]["post_text"]["artifact_sha256"] == artifact_hash
+        assert envelope["extraction"]["error_code"] is None
