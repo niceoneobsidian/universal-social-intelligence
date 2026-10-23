@@ -54,8 +54,15 @@ def test_export_from_real_sqlite_capture_preserves_artifact_provenance() -> None
             "INSERT INTO artifacts(artifact_id, capture_id, kind, relative_path, sha256, "
             "byte_size, media_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                artifact_id, capture_id, "rendered_dom_html", "page.html", artifact_hash,
-                len(artifact_bytes), "text/html", "Integration test artifact", timestamp,
+                artifact_id,
+                capture_id,
+                "rendered_dom_html",
+                "page.html",
+                artifact_hash,
+                len(artifact_bytes),
+                "text/html",
+                "Integration test artifact",
+                timestamp,
             ),
         )
         provenance = {
@@ -72,8 +79,15 @@ def test_export_from_real_sqlite_capture_preserves_artifact_provenance() -> None
             "VALUES (?, ?, 'generic_metadata', '0.1.0', 'success', ?, ?, ?, '{}', '[]', "
             "'1', ?, ?, ?, ?)",
             (
-                extraction_id, capture_id, "Evidence from a real SQLite fixture", "Fixture",
-                url, timestamp, source_id, url, json.dumps(provenance),
+                extraction_id,
+                capture_id,
+                "Evidence from a real SQLite fixture",
+                "Fixture",
+                url,
+                timestamp,
+                source_id,
+                url,
+                json.dumps(provenance),
             ),
         )
         connection.commit()
@@ -91,7 +105,4 @@ def test_export_from_real_sqlite_capture_preserves_artifact_provenance() -> None
         assert envelope["capture_id"] == capture_id
         assert envelope["capture_status"] == "success"
         assert envelope["artifacts"][0]["sha256"] == artifact_hash
-        assert (
-            envelope["extraction"]["provenance"]["post_text"]["artifact_sha256"]
-            == artifact_hash
-        )
+        assert envelope["extraction"]["provenance"]["post_text"]["artifact_sha256"] == artifact_hash
