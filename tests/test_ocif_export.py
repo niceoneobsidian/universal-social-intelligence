@@ -4,7 +4,7 @@ import hashlib
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import Mock
 
 from usie.integrations.ocif import OCIFExportError, export_capture
@@ -92,7 +92,7 @@ class OCIFExportTests(unittest.TestCase):
         original = self.repo.query.side_effect
 
         def queued_query(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-            rows = original(sql, params)
+            rows = cast(list[dict[str, Any]], original(sql, params))
             if "FROM captures c JOIN sources s" in sql:
                 rows[0]["status"] = "running"
             return rows
