@@ -1,7 +1,7 @@
 # OCIF Evidence Export Adapter
 
-**Status:** Read-only adapter implemented in a feature branch; producer-side tests are authored but not yet executed.  
-**Candidate wire contract:** `0.1.0`. Joint approval is still required before treating this as a stable export API.
+**Status:** Read-only adapter and producer tests are implemented in the integration branch. Producer CI passes on the current branch head.  
+**Wire contract:** `ocif.usie-import` version `0.1.0` is approved for internal cross-repository integration testing; it is not a stable public API or production certification.
 
 ## Source of truth
 
@@ -42,6 +42,10 @@ finally:
 ```
 
 The caller is responsible for serializing this envelope to a reviewed, access-controlled transport. No public HTTP endpoint or automatic cross-repository write is introduced here.
+
+## Contract decision
+
+USIE and OCIF accept the `0.1.0` envelope for internal implementation and integration testing. This decision preserves USIE ownership of canonical capture history and artifact bytes and OCIF ownership of imported observations and retrieval. The adapter is read-only and emits no public endpoint. The contract must not be described as stable or production-approved until the shared acceptance gates pass on the final reviewed PR heads.
 
 ## Acceptance still required
 
