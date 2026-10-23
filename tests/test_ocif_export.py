@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,6 +23,14 @@ class OCIFExportTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def provenance(self, *fields: str) -> str:
+        reference = {
+            "artifact_id": "artifact-1",
+            "artifact_sha256": self.digest,
+            "locator": "meta[property=og:description]",
+        }
+        return json.dumps({field: reference for field in fields})
 
     def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         if "FROM captures c JOIN sources s" in sql:
@@ -65,14 +74,22 @@ class OCIFExportTests(unittest.TestCase):
                     "metadata_json": "{}",
                     "issues_json": "[]",
                     "schema_version": "1",
-                    "provenance_json": (
-                        '{"post_text":{"artifact_id":"artifact-1","artifact_sha256":"'
-                        + self.digest
-                        + '","locator":"meta[property=og:description]"}}'
-                    ),
+                    "error_code": None,
+                    "provenance_json": self.provenance("post_text", "title", "canonical_url"),
                 }
             ]
         return []
+
+    def mutate_extraction(self, **changes: Any) -> None:
+        original = self.repo.query.side_effect
+
+        def changed_query(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+            rows = cast(list[dict[str, Any]], original(sql, params))
+            if "FROM extraction_results" in sql:
+                rows[0].update(changes)
+            return rows
+
+        self.repo.query.side_effect = changed_query
 
     def test_export_includes_verified_hash_provenance(self) -> None:
         result = export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
@@ -99,6 +116,31 @@ class OCIFExportTests(unittest.TestCase):
 
         self.repo.query.side_effect = queued_query
         with self.assertRaises(OCIFExportError):
+            export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
+
+    def test_populated_field_without_provenance_is_rejected(self) -> None:
+        self.mutate_extraction(provenance_json=self.provenance("post_text"))
+        with self.assertRaisesRegex(OCIFExportError, "title is missing provenance"):
+            export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
+
+    def test_success_requires_post_text_provenance(self) -> None:
+        self.mutate_extraction(provenance_json=self.provenance("title", "canonical_url"))
+        with self.assertRaisesRegex(OCIFExportError, "post_text provenance"):
+            export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
+
+    def test_unknown_extraction_status_is_rejected(self) -> None:
+        self.mutate_extraction(status="complete")
+        with self.assertRaisesRegex(OCIFExportError, "unsupported status"):
+            export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
+
+    def test_success_with_error_code_is_rejected(self) -> None:
+        self.mutate_extraction(error_code="extract_failed")
+        with self.assertRaisesRegex(OCIFExportError, "with an error"):
+            export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
+
+    def test_non_list_extraction_issues_are_rejected(self) -> None:
+        self.mutate_extraction(issues_json='{"not":"a list"}')
+        with self.assertRaisesRegex(OCIFExportError, "issues must be a list"):
             export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
 
 
