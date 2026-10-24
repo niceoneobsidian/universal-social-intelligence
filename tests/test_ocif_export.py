@@ -75,9 +75,7 @@ class OCIFExportTests(unittest.TestCase):
                     "issues_json": "[]",
                     "schema_version": "1",
                     "error_code": None,
-                    "provenance_json": self.provenance(
-                        "post_text", "title", "canonical_url"
-                    ),
+                    "provenance_json": self.provenance("post_text", "title", "canonical_url"),
                 }
             ]
         return []
@@ -139,9 +137,7 @@ class OCIFExportTests(unittest.TestCase):
                 return rows
 
             self.repo.query.side_effect = terminal_query
-            result = export_capture(
-                self.repo, self.root, "capture-1", producer_revision="abc123"
-            )
+            result = export_capture(self.repo, self.root, "capture-1", producer_revision="abc123")
             self.assertEqual(result["capture_status"], status)
             self.assertIsNone(result["extraction"])
 
