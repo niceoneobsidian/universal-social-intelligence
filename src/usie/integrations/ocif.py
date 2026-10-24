@@ -47,8 +47,7 @@ def _validate_extraction(row: dict[str, Any], artifact_hashes: dict[str, str]) -
     if not isinstance(issues, list):
         raise OCIFExportError("stored extraction issues must be a list")
     if any(
-        not isinstance(key, str) or not isinstance(value, str)
-        for key, value in metadata.items()
+        not isinstance(key, str) or not isinstance(value, str) for key, value in metadata.items()
     ):
         raise OCIFExportError("stored extraction metadata must contain string keys and values")
 
