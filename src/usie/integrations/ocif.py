@@ -57,7 +57,14 @@ def _validate_extraction(row: dict[str, Any], artifact_hashes: dict[str, str]) -
         artifact_id = ref.get("artifact_id")
         artifact_sha = ref.get("artifact_sha256")
         locator = ref.get("locator")
-        if not all(isinstance(item, str) and item for item in (artifact_id, artifact_sha, locator)):
+        if (
+            not isinstance(artifact_id, str)
+            or not artifact_id
+            or not isinstance(artifact_sha, str)
+            or not artifact_sha
+            or not isinstance(locator, str)
+            or not locator
+        ):
             raise OCIFExportError(f"invalid artifact provenance for field {field}")
         if artifact_hashes.get(artifact_id) != artifact_sha:
             raise OCIFExportError(
