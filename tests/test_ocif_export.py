@@ -130,7 +130,7 @@ class OCIFExportTests(unittest.TestCase):
             def terminal_query(
                 sql: str, params: tuple[Any, ...] = (), *, capture_status: str = status
             ) -> list[dict[str, Any]]:
-                rows = cast(list[dict[str, Any]], original(sql, params))
+                rows = original(sql, params)
                 if "FROM captures c JOIN sources s" in sql:
                     rows[0]["status"] = capture_status
                 if "FROM extraction_results" in sql:
