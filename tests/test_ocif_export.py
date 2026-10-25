@@ -126,6 +126,7 @@ class OCIFExportTests(unittest.TestCase):
     def test_terminal_capture_statuses_are_preserved(self) -> None:
         original = self.query
         for status in ("partial", "blocked", "unavailable", "failed", "cancelled"):
+
             def terminal_query(
                 sql: str, params: tuple[Any, ...] = (), *, capture_status: str = status
             ) -> list[dict[str, Any]]:
