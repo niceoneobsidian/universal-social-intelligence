@@ -29,9 +29,10 @@ _SECRET_QUERY_KEYS = re.compile(
     re.IGNORECASE,
 )
 _SENSITIVE_TEXT = re.compile(
-    r"(?i)\\b(?:bearer\\s+)[A-Za-z0-9._~+/-]+=*|"
-    r"(?i)(?:password|passwd|client_secret|api_key|access_token|refresh_token)"
-    r"\\s*[:=]\\s*[^\\s,;]+"
+    r"\b(?:bearer\s+)[A-Za-z0-9._~+/-]+=*|"
+    r"(?:password|passwd|client_secret|api_key|access_token|refresh_token)"
+    r"\s*[:=]\s*[^\s,;]+",
+    re.IGNORECASE,
 )
 
 
