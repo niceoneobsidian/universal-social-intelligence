@@ -83,7 +83,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "collect":
             if args.storage_state:
                 from dataclasses import replace
-                from pathlib import Path
 
                 settings = replace(settings, storage_state=Path(args.storage_state).expanduser())
             from usie.capture.browser import PlaywrightCapturer
