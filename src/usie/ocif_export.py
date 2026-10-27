@@ -57,7 +57,9 @@ def redact_url(value: str | None) -> str | None:
             (key, "[REDACTED]" if _SECRET_QUERY_KEYS.search(key) else item)
             for key, item in parse_qsl(parts.query, keep_blank_values=True)
         ]
-        return urlunsplit((parts.scheme.lower(), netloc, parts.path or "/", urlencode(safe_query), ""))
+        return urlunsplit(
+            (parts.scheme.lower(), netloc, parts.path or "/", urlencode(safe_query), "")
+        )
     except (UnicodeError, ValueError) as exc:
         raise ExportError("stored URL is malformed; refusing to export it") from exc
 
@@ -134,7 +136,10 @@ def export_envelopes(
             artifact_ids: set[str] = set()
             for row in artifact_rows:
                 issue = verify_artifact(
-                    evidence_root, str(row["relative_path"]), str(row["sha256"]), int(row["byte_size"])
+                    evidence_root,
+                    str(row["relative_path"]),
+                    str(row["sha256"]),
+                    int(row["byte_size"]),
                 )
                 if issue:
                     raise ExportError(
@@ -149,7 +154,9 @@ def export_envelopes(
                         "kind": str(row["kind"]),
                         "sha256": str(row["sha256"]),
                         "byte_size": int(row["byte_size"]),
-                        "media_type": str(row["media_type"]) if row["media_type"] is not None else None,
+                        "media_type": str(row["media_type"])
+                        if row["media_type"] is not None
+                        else None,
                         "location": str(row["relative_path"]),
                     }
                 )
@@ -199,9 +206,7 @@ def export_envelopes(
                 if not isinstance(metadata, dict):
                     raise ExportError("extraction metadata must be a JSON object")
                 if metadata:
-                    fields["metadata"] = {
-                        str(k): _safe_text(str(v)) for k, v in metadata.items()
-                    }
+                    fields["metadata"] = {str(k): _safe_text(str(v)) for k, v in metadata.items()}
                 extraction = {
                     "status": extraction_status,
                     "adapter": str(extraction_row["extractor"]),
