@@ -30,3 +30,18 @@ A read-only candidate export adapter is under review at `src/usie/integrations/o
 `social_evidence` is a read-only, lossy compatibility view over the latest capture, not a writable
 store. Append-only `captures` are canonical; the legacy `status_label` maps `blocked`, `unavailable`,
 and `failed` to `inaccessible`. See D-001.
+
+## OCIF evidence export (draft contract v0.1)
+The read-only `export-ocif` command exports finalized captures to a JSON bundle for a future OCIF importer. It opens SQLite in read-only mode, verifies every referenced artifact against its stored SHA-256 and size, redacts likely secrets from URLs/text, and fails closed on integrity or provenance errors. It does not call Meta APIs or change the canonical USIE database.
+
+```bash
+# Print all finalized captures as JSON (no database writes)
+usie export-ocif
+
+# Export one capture to stdout
+usie export-ocif --capture-id <CAPTURE_UUID>
+
+# Write a new private file; an existing path is never overwritten
+usie export-ocif --capture-id <CAPTURE_UUID> --output ./exports/capture.json
+```
+The exporter and contract are still draft integration work. The OCIF importer, durable receipt, and end-to-end producer/consumer acceptance are not implemented yet. Review [the contract](docs/integrations/ocif-evidence-contract.md) and [the JSON Schema](schemas/ocif-usie-evidence-v0.1.schema.json).
