@@ -93,9 +93,7 @@
             "blocked",
             "unavailable",
             "failed",
-            "cancelled",
-            "canceled",
-            "interrupted"
+            "cancelled"
           ]
         },
         "status_reason": {
