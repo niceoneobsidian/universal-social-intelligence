@@ -36,7 +36,9 @@ def _fixture_capture(
     capture_id = str(uuid.uuid4())
     repo.start_capture(capture_id, job_id, run, source_id, 1, submitted_url)
     payload = b"<html>public fixture</html>"
-    stored = store_artifact(evidence_root, capture_id, ArtifactKind.RENDERED_DOM_HTML, payload, 1024)
+    stored = store_artifact(
+        evidence_root, capture_id, ArtifactKind.RENDERED_DOM_HTML, payload, 1024
+    )
     artifact_id = str(uuid.uuid4())
     repo.add_artifact(
         capture_id,
@@ -104,9 +106,7 @@ def test_export_is_read_only_and_preserves_canonical_rows(repo: SqliteRepository
 
 def test_export_redacts_secret_query_parameters(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
-    envelope = export_envelopes(
-        settings.db_path, settings.evidence_root, capture_id=capture_id
-    )[0]
+    envelope = export_envelopes(settings.db_path, settings.evidence_root, capture_id=capture_id)[0]
     url = envelope["source"]["submitted_url"]
     assert "topsecret" not in url
     assert "utm_source" not in url
@@ -132,14 +132,17 @@ def test_partial_capture_without_extraction_is_exportable(repo: SqliteRepository
     )[0]
     assert envelope["capture"]["status"] == "partial"
     assert envelope["extraction"] is None
-    assert envelope["artifacts"][0]["sha256"] == hashlib.sha256(
-        b"<html>public fixture</html>"
-    ).hexdigest()
+    assert (
+        envelope["artifacts"][0]["sha256"]
+        == hashlib.sha256(b"<html>public fixture</html>").hexdigest()
+    )
 
 
 def test_tampered_artifact_fails_closed(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
-    artifact = repo.query("SELECT relative_path FROM artifacts WHERE capture_id=?", (capture_id,))[0]
+    artifact = repo.query("SELECT relative_path FROM artifacts WHERE capture_id=?", (capture_id,))[
+        0
+    ]
     (settings.evidence_root / artifact["relative_path"]).write_bytes(b"tampered")
     with pytest.raises(ExportError, match="integrity check"):
         export_envelopes(settings.db_path, settings.evidence_root, capture_id=capture_id)
@@ -154,9 +157,7 @@ def test_success_with_extraction_exports_provenance(repo: SqliteRepository, sett
     )[0]
     assert envelope["producer"]["revision"] == "abc123"
     assert envelope["extraction"]["status"] == "success"
-    assert envelope["extraction"]["evidence_refs"] == [
-        envelope["artifacts"][0]["artifact_id"]
-    ]
+    assert envelope["extraction"]["evidence_refs"] == [envelope["artifacts"][0]["artifact_id"]]
     assert envelope["extraction"]["fields"]["post_text"] == "A verified public post"
 
 
