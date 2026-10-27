@@ -2,7 +2,7 @@
 
 **Contract ID:** `ocif.usie-import`  
 **Contract version:** `0.1.0-draft`  
-**Status:** Producer export and OCIF consumer are not implemented by this document. This is the first reviewed integration seam, not a claim of working integration.
+**Status:** The read-only USIE exporter is implemented on the integration branch; the OCIF consumer is not implemented. The contract remains draft pending local test execution and producer/consumer acceptance.
 
 ## Ownership
 
@@ -20,7 +20,7 @@
 5. Import it into OCIF as an immutable, provenance-linked observation. Key delivery idempotency by `(source_id, capture_id, contract_version)`.
 6. Record the receipt/rejection and reason in the consumer. A later capture is a new observation; it never overwrites prior evidence.
 
-**Current limitation:** steps 3–6 are target work. No export CLI, OCIF importer, receipt endpoint, or end-to-end integration is asserted to exist here.
+**Current limitation:** step 3 now has a draft `usie export-ocif` CLI implementation and fixture tests. The OCIF importer, receipt endpoint, and end-to-end integration remain unimplemented; the tests still need to run in CI/local checkout.
 
 ## Envelope rules
 
@@ -59,8 +59,8 @@
 ## Implementation order
 
 1. Map actual repository columns and timestamps to the schema; add fixture tests first.
-2. Add a read-only exporter that selects finalized captures and resolves artifact references safely.
-3. Validate exporter output with the JSON Schema and hash checks.
+2. [Implemented on the integration branch] Add a read-only exporter that selects finalized captures and resolves artifact references safely.
+3. Verify exporter output against the JSON Schema in consumer/contract tests and verify artifact hashes. The exporter performs artifact hash and size checks; a full JSON Schema validator is not currently a runtime dependency.
 4. Implement the OCIF importer and durable idempotency/receipt behavior.
 5. Run producer and consumer contract tests plus one local end-to-end fixture.
 6. Only after acceptance, design OIS-governed scheduling. Do not add platform-specific analytics claims or live Meta integration as part of this contract change.
