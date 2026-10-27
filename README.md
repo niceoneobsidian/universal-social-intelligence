@@ -26,3 +26,7 @@ unauthenticated unless `--storage-state` is given.
 `social_evidence` is a read-only, lossy compatibility view over the latest capture, not a writable
 store. Append-only `captures` are canonical; the legacy `status_label` maps `blocked`, `unavailable`,
 and `failed` to `inaccessible`. See D-001.
+
+## Integrations
+- [USIE → OCIF evidence contract (draft; exporter/importer not implemented)](docs/integrations/ocif-evidence-contract.md)
+- [USIE → OCIF JSON Schema (draft)](schemas/ocif-usie-evidence-v0.1.schema.json)
