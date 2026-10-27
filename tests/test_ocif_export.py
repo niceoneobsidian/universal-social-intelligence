@@ -78,7 +78,9 @@ def _fixture_capture(
     return capture_id
 
 
-def test_export_is_read_only_and_preserves_canonical_rows(repo: SqliteRepository, settings: Settings) -> None:
+def test_export_is_read_only_and_preserves_canonical_rows(
+    repo: SqliteRepository, settings: Settings
+) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
     db_path = settings.db_path
     before = {
@@ -119,17 +121,19 @@ def test_redact_url_removes_credentials_fragment_and_token() -> None:
     assert "user" not in value and "pass" not in value and "private" not in value
 
 
-def test_success_requires_verified_extraction_provenance(repo: SqliteRepository, settings: Settings) -> None:
+def test_success_requires_verified_extraction_provenance(
+    repo: SqliteRepository, settings: Settings
+) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root, status=Status.SUCCESS)
     with pytest.raises(ExportError, match="without successful extraction"):
         export_envelopes(settings.db_path, settings.evidence_root, capture_id=capture_id)
 
 
-def test_partial_capture_without_extraction_is_exportable(repo: SqliteRepository, settings: Settings) -> None:
+def test_partial_capture_without_extraction_is_exportable(
+    repo: SqliteRepository, settings: Settings
+) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
-    envelope = export_envelopes(
-        settings.db_path, settings.evidence_root, capture_id=capture_id
-    )[0]
+    envelope = export_envelopes(settings.db_path, settings.evidence_root, capture_id=capture_id)[0]
     assert envelope["capture"]["status"] == "partial"
     assert envelope["extraction"] is None
     assert (
@@ -148,7 +152,9 @@ def test_tampered_artifact_fails_closed(repo: SqliteRepository, settings: Settin
         export_envelopes(settings.db_path, settings.evidence_root, capture_id=capture_id)
 
 
-def test_success_with_extraction_exports_provenance(repo: SqliteRepository, settings: Settings) -> None:
+def test_success_with_extraction_exports_provenance(
+    repo: SqliteRepository, settings: Settings
+) -> None:
     capture_id = _fixture_capture(
         repo, settings.evidence_root, status=Status.SUCCESS, with_extraction=True
     )
