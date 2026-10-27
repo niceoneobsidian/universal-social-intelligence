@@ -12,6 +12,7 @@ from usie.db import SqliteRepository
 from usie.db.migrations import MIGRATIONS, current_version
 from usie.evidence import verify_artifact
 from usie.logging_utils import configure_logging
+from usie.ocif_export import ExportError, export_envelopes, write_export
 from usie.routing import route_url
 from usie.urlsafety import InvalidUrlError, validate_submitted_url
 
@@ -32,6 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("verify", help="Re-hash every stored artifact and report integrity problems")
     sub.add_parser("db-status", help="Schema version and pending migrations")
     sub.add_parser("recover", help="Mark crash-interrupted runs/jobs/captures as failed")
+    e = sub.add_parser("export-ocif", help="Export finalized, verified evidence to an OCIF JSON bundle")
+    e.add_argument("--capture-id", help="Export one finalized capture only")
+    e.add_argument("--output", default="-", help="Output JSON path (new file only) or - for stdout")
     return p
 
 
@@ -55,6 +59,22 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         return 0
+    if args.command == "export-ocif":
+        try:
+            envelopes = export_envelopes(
+                settings.db_path,
+                settings.evidence_root,
+                capture_id=args.capture_id,
+            )
+            if args.output == "-":
+                _print(envelopes)
+            else:
+                write_export(__import__("pathlib").Path(args.output), envelopes)
+                print(f"exported {len(envelopes)} capture(s) to {args.output}", file=sys.stderr)
+            return 0
+        except (ExportError, OSError) as exc:
+            print(f"export rejected: {exc}", file=sys.stderr)
+            return 2
     repo = SqliteRepository(settings.db_path)
     try:
         if args.command == "collect":
