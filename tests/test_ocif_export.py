@@ -119,13 +119,13 @@ def test_redact_url_removes_credentials_fragment_and_token() -> None:
     assert "user" not in value and "pass" not in value and "private" not in value
 
 
-def test_success_requires_verified_extraction_provenance(repo, settings) -> None:
+def test_success_requires_verified_extraction_provenance(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root, status=Status.SUCCESS)
     with pytest.raises(ExportError, match="without successful extraction"):
         export_envelopes(settings.db_path, settings.evidence_root, capture_id=capture_id)
 
 
-def test_partial_capture_without_extraction_is_exportable(repo, settings) -> None:
+def test_partial_capture_without_extraction_is_exportable(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
     envelope = export_envelopes(
         settings.db_path, settings.evidence_root, capture_id=capture_id
@@ -137,7 +137,7 @@ def test_partial_capture_without_extraction_is_exportable(repo, settings) -> Non
     ).hexdigest()
 
 
-def test_tampered_artifact_fails_closed(repo, settings) -> None:
+def test_tampered_artifact_fails_closed(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
     artifact = repo.query("SELECT relative_path FROM artifacts WHERE capture_id=?", (capture_id,))[0]
     (settings.evidence_root / artifact["relative_path"]).write_bytes(b"tampered")
@@ -145,7 +145,7 @@ def test_tampered_artifact_fails_closed(repo, settings) -> None:
         export_envelopes(settings.db_path, settings.evidence_root, capture_id=capture_id)
 
 
-def test_success_with_extraction_exports_provenance(repo, settings) -> None:
+def test_success_with_extraction_exports_provenance(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(
         repo, settings.evidence_root, status=Status.SUCCESS, with_extraction=True
     )
@@ -160,7 +160,7 @@ def test_success_with_extraction_exports_provenance(repo, settings) -> None:
     assert envelope["extraction"]["fields"]["post_text"] == "A verified public post"
 
 
-def test_export_skips_unfinished_captures(repo, settings) -> None:
+def test_export_skips_unfinished_captures(repo: SqliteRepository, settings: Settings) -> None:
     run = repo.create_run(1, {}, {})
     source = repo.ensure_source("https://example.com/p", "https://example.com/p", "UNIVERSAL")
     job, _ = repo.create_job(run, source, "https://example.com/p")
