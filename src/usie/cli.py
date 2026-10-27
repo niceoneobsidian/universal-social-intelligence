@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from usie.collector import Collector, read_urls
@@ -69,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.output == "-":
                 _print(envelopes)
             else:
-                write_export(__import__("pathlib").Path(args.output), envelopes)
+                write_export(Path(args.output), envelopes)
                 print(f"exported {len(envelopes)} capture(s) to {args.output}", file=sys.stderr)
             return 0
         except (ExportError, OSError) as exc:
