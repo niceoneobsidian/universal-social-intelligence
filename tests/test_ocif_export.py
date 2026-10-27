@@ -8,9 +8,16 @@ from pathlib import Path
 
 import pytest
 
+from usie.config import Settings
 from usie.db import SqliteRepository
 from usie.evidence import store_artifact
-from usie.models import ArtifactKind, ExtractionProvenance, ExtractionResult, Status
+from usie.models import (
+    ArtifactDescriptor,
+    ArtifactKind,
+    ExtractionProvenance,
+    ExtractionResult,
+    Status,
+)
 from usie.ocif_export import ExportError, export_envelopes, redact_url, write_export
 
 
@@ -31,8 +38,6 @@ def _fixture_capture(
     payload = b"<html>public fixture</html>"
     stored = store_artifact(evidence_root, capture_id, ArtifactKind.RENDERED_DOM_HTML, payload, 1024)
     artifact_id = str(uuid.uuid4())
-    from usie.models import ArtifactDescriptor
-
     repo.add_artifact(
         capture_id,
         ArtifactDescriptor(
@@ -71,7 +76,7 @@ def _fixture_capture(
     return capture_id
 
 
-def test_export_is_read_only_and_preserves_canonical_rows(repo: SqliteRepository, settings) -> None:
+def test_export_is_read_only_and_preserves_canonical_rows(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
     db_path = settings.db_path
     before = {
@@ -97,7 +102,7 @@ def test_export_is_read_only_and_preserves_canonical_rows(repo: SqliteRepository
     assert result[0]["capture"]["capture_id"] == capture_id
 
 
-def test_export_redacts_secret_query_parameters(repo, settings) -> None:
+def test_export_redacts_secret_query_parameters(repo: SqliteRepository, settings: Settings) -> None:
     capture_id = _fixture_capture(repo, settings.evidence_root)
     envelope = export_envelopes(
         settings.db_path, settings.evidence_root, capture_id=capture_id
