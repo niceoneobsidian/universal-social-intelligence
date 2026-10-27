@@ -34,7 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("verify", help="Re-hash every stored artifact and report integrity problems")
     sub.add_parser("db-status", help="Schema version and pending migrations")
     sub.add_parser("recover", help="Mark crash-interrupted runs/jobs/captures as failed")
-    e = sub.add_parser("export-ocif", help="Export finalized, verified evidence to an OCIF JSON bundle")
+    e = sub.add_parser(
+        "export-ocif", help="Export finalized, verified evidence to an OCIF JSON bundle"
+    )
     e.add_argument("--capture-id", help="Export one finalized capture only")
     e.add_argument("--output", default="-", help="Output JSON path (new file only) or - for stdout")
     return p
